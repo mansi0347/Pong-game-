@@ -1,0 +1,190 @@
+const canvas = document.getElementById("pongCanvas");
+const ctx = canvas.getContext("2d");
+
+// Score track
+let playerScore = 0;
+let computerScore = 0;
+const playerScoreElem = document.getElementById("player-score");
+const computerScoreElem = document.getElementById("computer-score");
+
+// Game configurations
+const paddleWidth = 10;
+const paddleHeight = 100;
+const ballRadius = 8;
+
+// Left Paddle (Player)
+const player = {
+    x: 10,
+    y: canvas.height / 2 - paddleHeight / 2,
+    width: paddleWidth,
+    height: paddleHeight,
+    speed: 8
+};
+
+// Right Paddle (Computer AI)
+const computer = {
+    x: canvas.width - 10 - paddleWidth,
+    y: canvas.height / 2 - paddleHeight / 2,
+    width: paddleWidth,
+    height: paddleHeight,
+    speed: 4.5 // Adjust this value to alter computer difficulty
+};
+
+// Ball Object
+const ball = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    radius: ballRadius,
+    speedX: 5,
+    speedY: 3,
+    baseSpeed: 5
+};
+
+// Keyboard tracking states
+let upPressed = false;
+let downPressed = false;
+
+// Event Listeners
+document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp") upPressed = true;
+    if (e.key === "ArrowDown") downPressed = true;
+});
+
+document.addEventListener("keyup", (e) => {
+    if (e.key === "ArrowUp") upPressed = false;
+    if (e.key === "ArrowDown") downPressed = false;
+});
+
+// Mouse tracker
+canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    // Anchor target y to center point of the paddle
+    player.y = e.clientY - rect.top - player.height / 2;
+});
+
+// Reset ball position after someone scores
+function resetBall(winner) {
+    ball.x = canvas.width / 2;
+    ball.y = canvas.height / 2;
+    
+    // Send ball toward the winner, reset speed variables
+    ball.speedX = winner === "player" ? ball.baseSpeed : -ball.baseSpeed;
+    ball.speedY = (Math.random() * 2 - 1) * ball.baseSpeed; 
+}
+
+// Draw a simple dotted center line divider
+function drawNet() {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 15]);
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, 0);
+    ctx.lineTo(canvas.width / 2, canvas.height);
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset dash setting
+}
+
+// Bounding box collision detection logic
+function checkCollision(b, p) {
+    return b.x + b.radius > p.x && 
+           b.x - b.radius < p.x + p.width && 
+           b.y + b.radius > p.y && 
+           b.y - b.radius < p.y + p.height;
+}
+
+// Primary physics engine and updates
+function update() {
+    // 1. Player Paddle keyboard movements
+    if (upPressed && player.y > 0) {
+        player.y -= player.speed;
+    }
+    if (downPressed && player.y < canvas.height - player.height) {
+        player.y += player.speed;
+    }
+
+    // Restrict player paddle within canvas walls boundaries
+    if (player.y < 0) player.y = 0;
+    if (player.y > canvas.height - player.height) player.y = canvas.height - player.height;
+
+    // 2. Simple Computer tracking AI
+    const computerCenter = computer.y + computer.height / 2;
+    if (computerCenter < ball.y - 15) {
+        computer.y += computer.speed;
+    } else if (computerCenter > ball.y + 15) {
+        computer.y -= computer.speed;
+    }
+
+    // Restrict computer paddle within walls boundaries
+    if (computer.y < 0) computer.y = 0;
+    if (computer.y > canvas.height - computer.height) computer.y = canvas.height - computer.height;
+
+    // 3. Continuous Ball Movement
+    ball.x += ball.speedX;
+    ball.y += ball.speedY;
+
+    // Ceiling and Floor collision checks
+    if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
+        ball.speedY = -ball.speedY;
+    }
+
+    // Determine target paddle based on ball's direction
+    let targetPaddle = ball.speedX < 0 ? player : computer;
+
+    if (checkCollision(ball, targetPaddle)) {
+        // Reverse direction
+        ball.speedX = -ball.speedX;
+
+        // Dynamic angle trajectory changes based on impact point
+        let hitPoint = ball.y - (targetPaddle.y + targetPaddle.height / 2);
+        hitPoint = hitPoint / (targetPaddle.height / 2); // Normalize output between -1 and 1
+        
+        let angle = hitPoint * (Math.PI / 4); // Calculate bounce angle maxed at 45 degrees
+        
+        // Update physics velocity vectors, gradually accelerate velocity per hit
+        let speed = Math.hypot(ball.speedX, ball.speedY) * 1.05; 
+        ball.speedX = (targetPaddle === player ? 1 : -1) * speed * Math.cos(angle);
+        ball.speedY = speed * Math.sin(angle);
+    }
+
+    // 4. Out of bounds & Scoring logic
+    if (ball.x - ball.radius < 0) {
+        computerScore++;
+        computerScoreElem.innerText = computerScore;
+        resetBall("computer");
+    } else if (ball.x + ball.radius > canvas.width) {
+        playerScore++;
+        playerScoreElem.innerText = playerScore;
+        resetBall("player");
+    }
+}
+
+// Render components loop
+function draw() {
+    // Clear display field back to black canvas fill
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    drawNet();
+
+    // Render Paddles
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+    ctx.fillRect(computer.x, computer.y, computer.width, computer.height);
+
+    // Render Ball
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.closePath();
+}
+
+// Master animation runtime tracking loop
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// Start game
+gameLoop();
